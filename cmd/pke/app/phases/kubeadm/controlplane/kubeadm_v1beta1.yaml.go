@@ -23,7 +23,7 @@ func kubeadmConfigV1Beta1Template() string {
 		"  advertiseAddress: \"{{ .APIServerAdvertiseAddress }}\"\n" +
 		"  bindPort: {{ .APIServerBindPort }}{{end}}\n" +
 		"nodeRegistration:\n" +
-		"  criSocket: \"unix:///run/containerd/containerd.sock\"\n" +
+		"  criSocket: \"{{ .CRISocket }}\"\n" +
 		"  taints:{{ if not .Taints }} []{{end}}{{range .Taints}}\n" +
 		"    - key: \"{{.Key}}\"\n" +
 		"      value: \"{{.Value}}\"\n" +
@@ -48,7 +48,7 @@ func kubeadmConfigV1Beta1Template() string {
 		"kind: ClusterConfiguration\n" +
 		"clusterName: \"{{ .ClusterName }}\"\n" +
 		"imageRepository: {{ .ImageRepository }}\n" +
-		"useHyperKubeImage: true\n" +
+		"useHyperKubeImage:  {{ .UseHyperKubeImage }}\n" +
 		"networking:\n" +
 		"  serviceSubnet: \"{{ .ServiceCIDR }}\"\n" +
 		"  podSubnet: \"{{ .PodCIDR }}\"\n" +
@@ -64,7 +64,7 @@ func kubeadmConfigV1Beta1Template() string {
 		"  extraArgs:\n" +
 		"    # anonymous-auth: \"false\"\n" +
 		"    profiling: \"false\"\n" +
-		"    enable-admission-plugins: \"AlwaysPullImages,DenyEscalatingExec,EventRateLimit,NodeRestriction,ServiceAccount{{ if .WithPluginPSP }},PodSecurityPolicy{{end}}\"\n" +
+		"    enable-admission-plugins: \"AlwaysPullImages,{{ if not .WithoutPluginDenyEscalatingExec }}DenyEscalatingExec,{{end}}EventRateLimit,NodeRestriction,ServiceAccount{{ if .WithPluginPSP }},PodSecurityPolicy{{end}}\"\n" +
 		"    disable-admission-plugins: \"\"\n" +
 		"    admission-control-config-file: \"{{ .AdmissionConfig }}\"\n" +
 		"    audit-log-path: \"{{ .AuditLogDir }}/apiserver.log\"\n" +

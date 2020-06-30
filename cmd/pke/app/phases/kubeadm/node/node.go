@@ -23,6 +23,8 @@ import (
 	"text/template"
 	"time"
 
+	"emperror.dev/errors"
+	"github.com/banzaicloud/pke/cmd/pke/app/config"
 	"github.com/banzaicloud/pke/cmd/pke/app/constants"
 	"github.com/banzaicloud/pke/cmd/pke/app/phases"
 	"github.com/banzaicloud/pke/cmd/pke/app/phases/kubeadm"
@@ -40,20 +42,24 @@ const (
 	use   = "kubernetes-node"
 	short = "Kubernetes worker node installation"
 
-	cmdKubeadm         = "kubeadm"
-	kubeProxyConfig    = "/var/lib/kube-proxy/config.conf"
-	kubeadmConfig      = "/etc/kubernetes/kubeadm.conf"
-	kubeadmAzureConfig = "/etc/kubernetes/azure.conf"
-	cniDir             = "/etc/cni/net.d"
-	cniBridgeConfig    = "/etc/cni/net.d/10-bridge.conf"
-	cniLoopbackConfig  = "/etc/cni/net.d/99-loopback.conf"
-	maxJoinRetries     = 5
+	cmdKubeadm          = "kubeadm"
+	kubeProxyConfig     = "/var/lib/kube-proxy/config.conf"
+	kubeadmConfig       = "/etc/kubernetes/kubeadm.conf"
+	kubeadmAmazonConfig = "/etc/kubernetes/aws.conf"
+	kubeadmAzureConfig  = "/etc/kubernetes/azure.conf"
+	cniDir              = "/etc/cni/net.d"
+	cniBridgeConfig     = "/etc/cni/net.d/10-bridge.conf"
+	cniLoopbackConfig   = "/etc/cni/net.d/99-loopback.conf"
+	maxJoinRetries      = 5
 )
 
 var _ phases.Runnable = (*Node)(nil)
 
 type Node struct {
+	config config.Config
+
 	kubernetesVersion      string
+	containerRuntime       string
 	advertiseAddress       string
 	apiServerHostPort      string
 	kubeadmToken           string
@@ -73,8 +79,8 @@ type Node struct {
 	labels                 []string
 }
 
-func NewCommand() *cobra.Command {
-	return phases.NewCommand(&Node{})
+func NewCommand(config config.Config) *cobra.Command {
+	return phases.NewCommand(&Node{config: config})
 }
 
 func (n *Node) Use() string {
@@ -87,7 +93,9 @@ func (n *Node) Short() string {
 
 func (n *Node) RegisterFlags(flags *pflag.FlagSet) {
 	// Kubernetes version
-	flags.String(constants.FlagKubernetesVersion, "1.16.0", "Kubernetes version")
+	flags.String(constants.FlagKubernetesVersion, n.config.Kubernetes.Version, "Kubernetes version")
+	// Kubernetes container runtime
+	flags.String(constants.FlagContainerRuntime, n.config.ContainerRuntime.Type, "Kubernetes container runtime")
 	// Kubernetes network
 	flags.String(constants.FlagPodNetworkCIDR, "", "range of IP addresses for the pod network on the current node")
 	// Pipeline
@@ -129,6 +137,7 @@ func (n *Node) Validate(cmd *cobra.Command) error {
 
 	if err := validator.NotEmpty(map[string]interface{}{
 		constants.FlagKubernetesVersion: n.kubernetesVersion,
+		constants.FlagContainerRuntime:  n.containerRuntime,
 		constants.FlagAPIServerHostPort: n.apiServerHostPort,
 		constants.FlagKubeadmToken:      n.kubeadmToken,
 		constants.FlagCACertHash:        n.caCertHash,
@@ -152,6 +161,14 @@ func (n *Node) Validate(cmd *cobra.Command) error {
 		}
 	}
 
+	switch n.containerRuntime {
+	case constants.ContainerRuntimeContainerd,
+		constants.ContainerRuntimeDocker:
+		// break
+	default:
+		return errors.Wrapf(constants.ErrUnsupportedContainerRuntime, "container runtime: %s", n.containerRuntime)
+	}
+
 	flags.PrintFlags(cmd.OutOrStdout(), n.Use(), cmd.Flags())
 
 	return nil
@@ -161,7 +178,7 @@ func (n *Node) Run(out io.Writer) error {
 	_, _ = fmt.Fprintf(out, "[%s] running\n", n.Use())
 
 	if err := n.install(out); err != nil {
-		if rErr := kubeadm.Reset(out); rErr != nil {
+		if rErr := kubeadm.Reset(out, n.containerRuntime); rErr != nil {
 			_, _ = fmt.Fprintf(out, "%v\n", rErr)
 		}
 		return err
@@ -172,6 +189,10 @@ func (n *Node) Run(out io.Writer) error {
 
 func (n *Node) workerBootstrapParameters(cmd *cobra.Command) (err error) {
 	n.kubernetesVersion, err = cmd.Flags().GetString(constants.FlagKubernetesVersion)
+	if err != nil {
+		return
+	}
+	n.containerRuntime, err = cmd.Flags().GetString(constants.FlagContainerRuntime)
 	if err != nil {
 		return
 	}
@@ -264,6 +285,12 @@ func (n *Node) install(out io.Writer) error {
 		return err
 	}
 
+	// write kubeadm aws.conf
+	err = kubeadm.WriteKubeadmAmazonConfig(out, kubeadmAmazonConfig, n.cloudProvider)
+	if err != nil {
+		return err
+	}
+
 	// write kubeadm azure.conf
 	err = kubeadm.WriteKubeadmAzureConfig(out, kubeadmAzureConfig, n.cloudProvider, n.azureTenantID, n.azureSubnetName, n.azureSecurityGroupName, n.azureVNetName, n.azureVNetResourceGroup, n.azureVMType, n.azureLoadBalancerSku, n.azureRouteTableName, true)
 	if err != nil {
@@ -296,7 +323,8 @@ func (n *Node) install(out io.Writer) error {
 		}
 
 		// re-run command on connection refused error
-		if !strings.Contains(ll, "connection refused") {
+		// couldn't validate the identity of the API Server: abort connecting to API servers after timeout of 5m0s
+		if !strings.Contains(ll, "connection refused") && !strings.Contains(ll, "timeout") {
 			return err
 		}
 		_, _ = fmt.Fprintf(out, "[%s] re-run %q command\n", use, cmdKubeadm)

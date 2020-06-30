@@ -5,7 +5,7 @@ localAPIEndpoint:
   advertiseAddress: "{{ .APIServerAdvertiseAddress }}"
   bindPort: {{ .APIServerBindPort }}{{end}}
 nodeRegistration:
-  criSocket: "unix:///run/containerd/containerd.sock"
+  criSocket: "{{ .CRISocket }}"
   taints:{{ if not .Taints }} []{{end}}{{range .Taints}}
     - key: "{{.Key}}"
       value: "{{.Value}}"
@@ -30,7 +30,7 @@ apiVersion: kubeadm.k8s.io/v1beta1
 kind: ClusterConfiguration
 clusterName: "{{ .ClusterName }}"
 imageRepository: {{ .ImageRepository }}
-useHyperKubeImage: true
+useHyperKubeImage:  {{ .UseHyperKubeImage }}
 networking:
   serviceSubnet: "{{ .ServiceCIDR }}"
   podSubnet: "{{ .PodCIDR }}"
@@ -46,7 +46,7 @@ apiServer:
   extraArgs:
     # anonymous-auth: "false"
     profiling: "false"
-    enable-admission-plugins: "AlwaysPullImages,DenyEscalatingExec,EventRateLimit,NodeRestriction,ServiceAccount{{ if .WithPluginPSP }},PodSecurityPolicy{{end}}"
+    enable-admission-plugins: "AlwaysPullImages,{{ if not .WithoutPluginDenyEscalatingExec }}DenyEscalatingExec,{{end}}EventRateLimit,NodeRestriction,ServiceAccount{{ if .WithPluginPSP }},PodSecurityPolicy{{end}}"
     disable-admission-plugins: ""
     admission-control-config-file: "{{ .AdmissionConfig }}"
     audit-log-path: "{{ .AuditLogDir }}/apiserver.log"

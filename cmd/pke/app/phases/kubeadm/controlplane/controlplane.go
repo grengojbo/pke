@@ -20,7 +20,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -34,6 +33,7 @@ import (
 	"emperror.dev/errors"
 	"github.com/Masterminds/semver"
 	"github.com/banzaicloud/pke/.gen/pipeline"
+	"github.com/banzaicloud/pke/cmd/pke/app/config"
 	"github.com/banzaicloud/pke/cmd/pke/app/constants"
 	"github.com/banzaicloud/pke/cmd/pke/app/phases"
 	"github.com/banzaicloud/pke/cmd/pke/app/phases/kubeadm"
@@ -71,7 +71,6 @@ const (
 	admissionEventRateLimitConfig = "/etc/kubernetes/admission-control/event-rate-limit.yaml"
 	podSecurityPolicyConfig       = "/etc/kubernetes/admission-control/pod-security-policy.yaml"
 	certificateAutoApprover       = "/etc/kubernetes/admission-control/deploy-auto-approver.yaml"
-	urlAWSAZ                      = "http://169.254.169.254/latest/meta-data/placement/availability-zone"
 	cniDir                        = "/etc/cni/net.d"
 	etcdDir                       = "/var/lib/etcd"
 	auditPolicyFile               = "/etc/kubernetes/audit-policy-file.yaml"
@@ -83,7 +82,10 @@ const (
 var _ phases.Runnable = (*ControlPlane)(nil)
 
 type ControlPlane struct {
+	config config.Config
+
 	kubernetesVersion                string
+	containerRuntime                 string
 	networkProvider                  string
 	advertiseAddress                 string
 	apiServerHostPort                string
@@ -102,7 +104,9 @@ type ControlPlane struct {
 	oidcClientID                     string
 	imageRepository                  string
 	withPluginPSP                    bool
-	withAuditLog                     bool
+	withoutPluginDenyEscalatingExec  bool
+	useHyperKubeImage                bool
+	withoutAuditLog                  bool
 	node                             *node.Node
 	azureTenantID                    string
 	azureSubnetName                  string
@@ -137,9 +141,10 @@ type ControlPlane struct {
 	encryptionSecret                 string
 }
 
-func NewCommand() *cobra.Command {
+func NewCommand(config config.Config) *cobra.Command {
 	return phases.NewCommand(&ControlPlane{
-		node: &node.Node{},
+		config: config,
+		node:   &node.Node{},
 	})
 }
 
@@ -161,7 +166,9 @@ func (c *ControlPlane) Short() string {
 
 func (c *ControlPlane) RegisterFlags(flags *pflag.FlagSet) {
 	// Kubernetes version
-	flags.String(constants.FlagKubernetesVersion, "1.16.0", "Kubernetes version")
+	flags.String(constants.FlagKubernetesVersion, c.config.Kubernetes.Version, "Kubernetes version")
+	// Kubernetes container runtime
+	flags.String(constants.FlagContainerRuntime, c.config.ContainerRuntime.Type, "Kubernetes container runtime")
 	// Kubernetes network
 	flags.String(constants.FlagNetworkProvider, "calico", "Kubernetes network provider")
 	flags.String(constants.FlagAdvertiseAddress, "", "Kubernetes API Server advertise address")
@@ -188,8 +195,11 @@ func (c *ControlPlane) RegisterFlags(flags *pflag.FlagSet) {
 	flags.String(constants.FlagImageRepository, "banzaicloud", "Prefix for image repository")
 	// PodSecurityPolicy admission plugin
 	flags.Bool(constants.FlagAdmissionPluginPodSecurityPolicy, false, "Enable PodSecurityPolicy admission plugin")
+	// DenyEscalatingExec admission plugin
+	flags.Bool(constants.FlagNoAdmissionPluginDenyEscalatingExec, false, "Disable DenyEscalatingExec admission plugin")
+
 	// AuditLog enable
-	flags.Bool(constants.FlagAuditLog, false, "Enable apiserver audit log")
+	flags.Bool(constants.FlagAuditLog, false, "Disable apiserver audit log")
 	// Azure cloud
 	flags.String(constants.FlagAzureTenantID, "", "The AAD Tenant ID for the Subscription that the cluster is deployed in")
 	flags.String(constants.FlagAzureSubnetName, "", "The name of the subnet that the cluster is deployed in")
@@ -259,6 +269,7 @@ func (c *ControlPlane) Validate(cmd *cobra.Command) error {
 
 	if err := validator.NotEmpty(map[string]interface{}{
 		constants.FlagKubernetesVersion: c.kubernetesVersion,
+		constants.FlagContainerRuntime:  c.containerRuntime,
 		constants.FlagNetworkProvider:   c.networkProvider,
 		constants.FlagServiceCIDR:       c.serviceCIDR,
 		constants.FlagPodNetworkCIDR:    c.podNetworkCIDR,
@@ -285,6 +296,14 @@ func (c *ControlPlane) Validate(cmd *cobra.Command) error {
 		}); err != nil {
 			return err
 		}
+	}
+
+	switch c.containerRuntime {
+	case constants.ContainerRuntimeContainerd,
+		constants.ContainerRuntimeDocker:
+		// break
+	default:
+		return errors.Wrapf(constants.ErrUnsupportedContainerRuntime, "container runtime: %s", c.containerRuntime)
 	}
 
 	switch c.networkProvider {
@@ -442,7 +461,7 @@ func (c *ControlPlane) Run(out io.Writer) error {
 				return err
 			}
 			// install additional master node
-			if err := writeMasterConfig(out, c.withAuditLog, c.kubernetesVersion, c.encryptionSecret); err != nil {
+			if err := writeMasterConfig(out, !c.withoutAuditLog, c.kubernetesVersion, c.encryptionSecret); err != nil {
 				return err
 			}
 			_, _ = fmt.Fprintf(out, "[%s] installing additional master node\n", c.Use())
@@ -457,7 +476,7 @@ func (c *ControlPlane) Run(out io.Writer) error {
 	}
 
 	if err := c.installMaster(out); err != nil {
-		if rErr := kubeadm.Reset(out); rErr != nil {
+		if rErr := kubeadm.Reset(out, c.containerRuntime); rErr != nil {
 			_, _ = fmt.Fprintf(out, "%v\n", rErr)
 		}
 		return err
@@ -530,6 +549,7 @@ func ensureAPIServerConnection(out io.Writer, ctx context.Context, successTries 
 	}
 }
 
+// nolint: gocyclo
 func (c *ControlPlane) masterBootstrapParameters(cmd *cobra.Command) (err error) {
 	c.kubernetesVersion, err = cmd.Flags().GetString(constants.FlagKubernetesVersion)
 	if err != nil {
@@ -540,6 +560,11 @@ func (c *ControlPlane) masterBootstrapParameters(cmd *cobra.Command) (err error)
 		return
 	}
 	c.kubernetesVersion = ver.String()
+
+	c.containerRuntime, err = cmd.Flags().GetString(constants.FlagContainerRuntime)
+	if err != nil {
+		return
+	}
 
 	c.networkProvider, err = cmd.Flags().GetString(constants.FlagNetworkProvider)
 	if err != nil {
@@ -609,7 +634,11 @@ func (c *ControlPlane) masterBootstrapParameters(cmd *cobra.Command) (err error)
 	if err != nil {
 		return
 	}
-	c.withAuditLog, err = cmd.Flags().GetBool(constants.FlagAuditLog)
+	c.withoutPluginDenyEscalatingExec, err = cmd.Flags().GetBool(constants.FlagNoAdmissionPluginDenyEscalatingExec)
+	if err != nil {
+		return
+	}
+	c.withoutAuditLog, err = cmd.Flags().GetBool(constants.FlagAuditLog)
 	if err != nil {
 		return
 	}
@@ -793,12 +822,12 @@ func (c *ControlPlane) installMaster(out io.Writer) error {
 	}
 
 	// write master config
-	if err := writeMasterConfig(out, c.withAuditLog, c.kubernetesVersion, c.encryptionSecret); err != nil {
+	if err := writeMasterConfig(out, !c.withoutAuditLog, c.kubernetesVersion, c.encryptionSecret); err != nil {
 		return err
 	}
 
 	// write kubeadm aws.conf
-	err = writeKubeadmAmazonConfig(out, kubeadmAmazonConfig, c.cloudProvider)
+	err = kubeadm.WriteKubeadmAmazonConfig(out, kubeadmAmazonConfig, c.cloudProvider)
 	if err != nil {
 		return err
 	}
@@ -924,47 +953,6 @@ func installCilium(out io.Writer, kubeConfig string, mtu uint) error {
 	cmd.Stdin = strings.NewReader(input)
 	_, err := cmd.CombinedOutputAsync()
 	return err
-}
-
-func writeKubeadmAmazonConfig(out io.Writer, filename, cloudProvider string) error {
-	if cloudProvider != constants.CloudProviderAmazon {
-		return nil
-	}
-
-	if http.DefaultClient.Timeout < 10*time.Second {
-		http.DefaultClient.Timeout = 10 * time.Second
-	}
-
-	// printf "[GLOBAL]\nZone="$(curl -q -s http://169.254.169.254/latest/meta-data/placement/availability-zone) > /etc/kubernetes/aws.conf
-	resp, err := http.Get(urlAWSAZ)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return errors.Errorf("failed to get aws availability zone. http status code: %d", resp.StatusCode)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "failed to read response body")
-	}
-
-	tmpl, err := template.New("amazon").Parse(`[GLOBAL]
-Zone={{ .Zone }}`)
-	if err != nil {
-		return err
-	}
-
-	type data struct {
-		Zone string
-	}
-
-	d := data{
-		Zone: string(b),
-	}
-
-	return file.WriteTemplate(filename, tmpl, d)
 }
 
 //go:generate templify -t ${GOTMPL} -p controlplane -f admissionConfiguration admission_configuration.yaml.tmpl

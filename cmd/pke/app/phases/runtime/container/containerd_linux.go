@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	containerdVersion     = "1.2.9"
-	containerdSHA256      = "a1e8d3f6427f3146d8a3cce7a5d5fd55db0365697ece91506f74d116bdf0dff3"
+	containerdVersion     = "1.3.3"
+	containerdSHA256      = "24ce7ad6b489fb25d07d2a3bb50e443fcce1ac3318f8cc0831e00668c2c9fd86"
 	containerdURL         = "https://storage.googleapis.com/cri-containerd-release/cri-containerd-%s.linux-amd64.tar.gz"
 	containerdVersionPath = "/opt/containerd/cluster/version"
 	containerdConf        = "/etc/containerd/config.toml"
@@ -41,15 +41,12 @@ net.ipv4.ip_forward                 = 1
 `
 )
 
-func (r *Runtime) installRuntime(out io.Writer) error {
+func (r *Runtime) installContainerd(out io.Writer) error {
 	pm, err := linux.ContainerdPackagesImpl(out)
 	if err != nil {
 		return err
 	}
-	return install(out, r.imageRepository, pm)
-}
 
-func install(out io.Writer, imageRepository string, pm linux.ContainerdPackages) error {
 	// modprobe overlay
 	if err := linux.ModprobeOverlay(out); err != nil {
 		return errors.Wrap(err, "missing overlay Linux Kernel module")
@@ -81,7 +78,7 @@ func install(out io.Writer, imageRepository string, pm linux.ContainerdPackages)
 	_ = linux.SystemctlDisableAndStop(out, "containerd")
 
 	// Check containerd installed or not
-	if err := installContainerd(out, imageRepository); err != nil {
+	if err := installContainerd(out, r.imageRepository); err != nil {
 		return err
 	}
 
@@ -109,8 +106,8 @@ func installContainerd(out io.Writer, imageRepository string) error {
 		return errors.Wrapf(err, "unable to create temporary file: %q", f.Name())
 	}
 	defer func() { _ = f.Close() }()
-	// export CONTAINERD_VERSION="1.2.0"
-	// export CONTAINERD_SHA256="ee076c6260de140f9aa6dee30b0e360abfb80af252d271e697982d1209ca5dee"
+	// export CONTAINERD_VERSION="1.3.3"
+	// export CONTAINERD_SHA256="24ce7ad6b489fb25d07d2a3bb50e443fcce1ac3318f8cc0831e00668c2c9fd86"
 	// wget https://storage.googleapis.com/cri-containerd-release/cri-containerd-${CONTAINERD_VERSION}.linux-amd64.tar.gz
 	dl := fmt.Sprintf(containerdURL, containerdVersion)
 	u, err := url.Parse(dl)

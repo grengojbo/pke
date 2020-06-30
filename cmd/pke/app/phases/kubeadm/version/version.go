@@ -20,6 +20,7 @@ import (
 
 	"emperror.dev/errors"
 	"github.com/Masterminds/semver"
+	"github.com/banzaicloud/pke/cmd/pke/app/config"
 	"github.com/banzaicloud/pke/cmd/pke/app/constants"
 	"github.com/banzaicloud/pke/cmd/pke/app/phases"
 	"github.com/banzaicloud/pke/cmd/pke/app/util/validator"
@@ -31,17 +32,19 @@ const (
 	use   = "kubernetes-version"
 	short = "Check Kubernetes version is supported or not"
 
-	constraint = "1.13.x-0 || 1.14.x-0 || 1.15.x-0 || 1.16.x-0"
+	constraint = "1.15.x-0 || 1.16.x-0 || 1.17.x-0 || 1.18.x-0"
 )
 
 var _ phases.Runnable = (*Version)(nil)
 
 type Version struct {
+	config config.Config
+
 	kubernetesVersion string
 }
 
-func NewCommand() *cobra.Command {
-	return phases.NewCommand(&Version{})
+func NewCommand(config config.Config) *cobra.Command {
+	return phases.NewCommand(&Version{config: config})
 }
 
 func (v *Version) Use() string {
@@ -54,7 +57,7 @@ func (v *Version) Short() string {
 
 func (v *Version) RegisterFlags(flags *pflag.FlagSet) {
 	// Kubernetes version
-	flags.String(constants.FlagKubernetesVersion, "1.16.0", "Kubernetes version")
+	flags.String(constants.FlagKubernetesVersion, v.config.Kubernetes.Version, "Kubernetes version")
 }
 
 func (v *Version) Validate(cmd *cobra.Command) error {

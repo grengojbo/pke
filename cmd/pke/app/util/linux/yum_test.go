@@ -26,12 +26,26 @@ func TestMapYumPackageVersion(t *testing.T) {
 		kubernetesVersion string
 		expected          string
 	}{
-		{kubeadm, "1.14.0", "kubeadm-1.14.0-0"},
-		{kubectl, "1.14.0", "kubectl-1.14.0-0"},
-		{kubelet, "1.14.0", "kubelet-1.14.0-0"},
-		{kubernetescni, "1.14.0", "kubernetes-cni-0.7.5-0"},
-		{kubernetescni, "1.13.0", "kubernetes-cni-0.7.5-0"},
-		{kubernetescni, "1.12.2", "kubernetes-cni-0.6.0-0"},
+		{kubeadm, "1.16.10", "kubeadm-1.16.10-0"},
+		{kubectl, "1.16.10", "kubectl-1.16.10-0"},
+		{kubelet, "1.16.10", "kubelet-1.16.10-0"},
+		{kubeadm, "1.16.11", "kubeadm-1.16.11-1"},
+		{kubectl, "1.16.11", "kubectl-1.16.11-1"},
+		{kubelet, "1.16.11", "kubelet-1.16.11-1"},
+		{kubeadm, "1.17.6", "kubeadm-1.17.6-0"},
+		{kubectl, "1.17.6", "kubectl-1.17.6-0"},
+		{kubelet, "1.17.6", "kubelet-1.17.6-0"},
+		{kubeadm, "1.17.7", "kubeadm-1.17.7-1"},
+		{kubectl, "1.17.7", "kubectl-1.17.7-1"},
+		{kubelet, "1.17.7", "kubelet-1.17.7-1"},
+		{kubeadm, "1.18.3", "kubeadm-1.18.3-0"},
+		{kubectl, "1.18.3", "kubectl-1.18.3-0"},
+		{kubelet, "1.18.3", "kubelet-1.18.3-0"},
+		{kubeadm, "1.18.4", "kubeadm-1.18.4-1"},
+		{kubectl, "1.18.4", "kubectl-1.18.4-1"},
+		{kubelet, "1.18.4", "kubelet-1.18.4-1"},
+		{kubernetescni, "1.17.0", "kubernetes-cni-0.8.6-0"},
+		{kubernetescni, "1.18.4", "kubernetes-cni-0.8.6-0"},
 	}
 	for _, tc := range testCases {
 		got := mapYumPackageVersion(tc.pkg, tc.kubernetesVersion)
@@ -48,8 +62,8 @@ func TestParseRpmPackageOutput(t *testing.T) {
 		arch    string
 		err     bool
 	}{
-		{"kubernetes-cni-0.7.5-0.x86_64", "kubernetes-cni", "0.7.5", "0", "x86_64", false},
-		{"kubeadm-1.14.0-0.x86_64", "kubeadm", "1.14.0", "0", "x86_64", false},
+		{"kubernetes-cni-0.8.6-0.x86_64", "kubernetes-cni", "0.8.6", "0", "x86_64", false},
+		{"kubeadm-1.18.0-0.x86_64", "kubeadm", "1.18.0", "0", "x86_64", false},
 		{"kubeadm", "", "", "", "", true},
 		{"util-linux-2.23.2-59.el7.x86_64", "util-linux", "2.23.2", "59.el7", "x86_64", false},
 		{"systemd-219-62.el7_6.5.x86_64", "systemd", "219", "62.el7_6.5", "x86_64", false},

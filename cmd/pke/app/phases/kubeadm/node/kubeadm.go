@@ -23,13 +23,14 @@ import (
 	"emperror.dev/errors"
 	"github.com/Masterminds/semver"
 	"github.com/banzaicloud/pke/cmd/pke/app/phases/kubeadm"
+	"github.com/banzaicloud/pke/cmd/pke/app/util/cri"
 	"github.com/banzaicloud/pke/cmd/pke/app/util/file"
 	"github.com/banzaicloud/pke/cmd/pke/app/util/kubernetes"
 	"github.com/pbnjay/memory"
 )
 
-//go:generate templify -t ${GOTMPL} -p node -f kubeadmConfigV1Alpha3 kubeadm_v1alpha3.yaml.tmpl
 //go:generate templify -t ${GOTMPL} -p node -f kubeadmConfigV1Beta1 kubeadm_v1beta1.yaml.tmpl
+//go:generate templify -t ${GOTMPL} -p node -f kubeadmConfigV1Beta2 kubeadm_v1beta2.yaml.tmpl
 
 func (n Node) writeKubeadmConfig(out io.Writer, filename string) error {
 	// API server advertisement
@@ -59,12 +60,12 @@ func (n Node) writeKubeadmConfig(out io.Writer, filename string) error {
 
 	var conf string
 	switch ver.Minor() {
-	case 12, 13:
-		// see https://godoc.org/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1alpha3
-		conf = kubeadmConfigV1Alpha3Template()
-	case 14, 15, 16:
+	case 15, 16, 17:
 		// see https://godoc.org/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1
 		conf = kubeadmConfigV1Beta1Template()
+	case 18:
+		// see https://godoc.org/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1
+		conf = kubeadmConfigV1Beta2Template()
 	default:
 		return errors.Errorf("unsupported Kubernetes version %q for kubeadm", n.kubernetesVersion)
 	}
@@ -94,6 +95,7 @@ func (n Node) writeKubeadmConfig(out io.Writer, filename string) error {
 	type data struct {
 		APIServerAdvertiseAddress string
 		APIServerBindPort         string
+		CRISocket                 string
 		ControlPlaneEndpoint      string
 		Token                     string
 		CACertHash                string
@@ -107,6 +109,7 @@ func (n Node) writeKubeadmConfig(out io.Writer, filename string) error {
 	d := data{
 		APIServerAdvertiseAddress: n.advertiseAddress,
 		APIServerBindPort:         bindPort,
+		CRISocket:                 cri.GetCRISocket(n.containerRuntime),
 		ControlPlaneEndpoint:      n.apiServerHostPort,
 		Token:                     n.kubeadmToken,
 		CACertHash:                n.caCertHash,

@@ -1,11 +1,12 @@
-apiVersion: kubeadm.k8s.io/v1alpha3
+apiVersion: kubeadm.k8s.io/v1beta2
 kind: JoinConfiguration
-{{ if and .APIServerAdvertiseAddress .APIServerBindPort }}controlPlane: true
-apiEndpoint:
-  advertiseAddress: "{{ .APIServerAdvertiseAddress }}"
-  bindPort: {{ .APIServerBindPort }}{{end}}
+{{ if and .APIServerAdvertiseAddress .APIServerBindPort }}
+controlPlane:
+  localAPIEndpoint:
+    advertiseAddress: "{{ .APIServerAdvertiseAddress }}"
+    bindPort: {{ .APIServerBindPort }}{{end}}
 nodeRegistration:
-  criSocket: "unix:///run/containerd/containerd.sock"
+  criSocket: "{{ .CRISocket }}"
   taints:{{ if not .Taints }} []{{end}}{{range .Taints}}
     - key: "{{.Key}}"
       value: "{{.Value}}"
@@ -17,7 +18,6 @@ nodeRegistration:
     read-only-port: "0"
     anonymous-auth: "false"
     streaming-connection-idle-timeout: "5m"
-    protect-kernel-defaults: "true"
     event-qps: "0"
     client-ca-file: "/etc/kubernetes/pki/ca.crt"
     feature-gates: "RotateKubeletServerCertificate=true"
@@ -25,13 +25,14 @@ nodeRegistration:
     tls-cipher-suites: "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_128_GCM_SHA256"
     authorization-mode: "Webhook"
     experimental-kernel-memcg-notification: "true"
-discoveryTokenAPIServers:
-  - {{ .ControlPlaneEndpoint }}
-token: {{ .Token }}
-discoveryTokenCACertHashes:
-  - {{ .CACertHash }}
+discovery:
+  bootstrapToken:
+    apiServerEndpoint: "{{ .ControlPlaneEndpoint }}"
+    token: {{ .Token }}
+    caCertHashes:
+      - {{ .CACertHash }}
 ---
-apiVersion: kubelet.config.k8s.io/v1beta1
+apiVersion: kubelet.config.k8s.io/v1beta2
 kind: KubeletConfiguration
 serverTLSBootstrap: true
 systemReserved:
@@ -47,3 +48,4 @@ evictionHard:
   memory.available: 100Mi
   nodefs.available: 10%
   nodefs.inodesFree: 5%
+protectKernelDefaults: true

@@ -31,36 +31,24 @@ func TestWriteKubeadmConfig(t *testing.T) {
 	t.Log(filename)
 
 	c := &ControlPlane{
-		advertiseAddress:            "192.168.64.11:6443",
-		apiServerHostPort:           "192.168.64.11:6443",
-		kubeletCertificateAuthority: "/etc/kubernetes/pki/ca.crt",
-		clusterName:                 "my-cluster",
-		kubernetesVersion:           "1.14.0",
-		serviceCIDR:                 "10.32.0.0/24",
-		podNetworkCIDR:              "10.200.0.0/16",
-		cloudProvider:               constants.CloudProviderAmazon,
-		nodepool:                    "pool1",
-		controllerManagerSigningCA:  "/etc/kubernetes/pki/cm-signing-ca.crt",
-		apiServerCertSANs:           []string{"almafa", "vadkorte"},
-		withPluginPSP:               true,
-		taints:                      []string{"node-role.kubernetes.io/master:NoSchedule"},
-		withAuditLog:                true,
+		advertiseAddress:                "192.168.64.11:6443",
+		apiServerHostPort:               "192.168.64.11:6443",
+		kubeletCertificateAuthority:     "/etc/kubernetes/pki/ca.crt",
+		clusterName:                     "my-cluster",
+		kubernetesVersion:               "1.18.0",
+		serviceCIDR:                     "10.32.0.0/24",
+		podNetworkCIDR:                  "10.200.0.0/16",
+		cloudProvider:                   constants.CloudProviderAmazon,
+		nodepool:                        "pool1",
+		controllerManagerSigningCA:      "/etc/kubernetes/pki/cm-signing-ca.crt",
+		apiServerCertSANs:               []string{"almafa", "vadkorte"},
+		withPluginPSP:                   true,
+		withoutPluginDenyEscalatingExec: false,
+		taints:                          []string{"node-role.kubernetes.io/master:NoSchedule"},
+		withoutAuditLog:                 false,
 	}
 
 	err := c.WriteKubeadmConfig(os.Stdout, filename)
-	require.NoError(t, err)
-	defer func() { _ = os.Remove(filename) }()
-
-	b, err := ioutil.ReadFile(filename)
-	require.NoError(t, err)
-	t.Logf("%s\n", b)
-}
-
-func TestWriteKubeadmAmazonConfig(t *testing.T) {
-	t.SkipNow()
-	filename := os.TempDir() + "aws.conf"
-	t.Log(filename)
-	err := writeKubeadmAmazonConfig(os.Stdout, filename, constants.CloudProviderAmazon)
 	require.NoError(t, err)
 	defer func() { _ = os.Remove(filename) }()
 

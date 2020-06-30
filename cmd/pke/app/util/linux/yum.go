@@ -60,6 +60,9 @@ func YumInstall(out io.Writer, packages []string) error {
 	}
 
 	for _, pkg := range packages {
+		if pkg == "" {
+			continue
+		}
 		if pkg[:1] == "-" {
 			continue
 		}
@@ -192,6 +195,7 @@ func (y *YumInstaller) InstallKubeadmPackage(out io.Writer, kubernetesVersion st
 		mapYumPackageVersion(kubernetescni, kubernetesVersion), // kubeadm dependency
 		disableExcludesKubernetes,
 	}
+
 	return YumInstall(out, pkg)
 }
 
@@ -207,23 +211,28 @@ func (y *YumInstaller) InstallContainerdPrerequisites(out io.Writer, containerdV
 func mapYumPackageVersion(pkg, kubernetesVersion string) string {
 	switch pkg {
 	case kubeadm:
-		return "kubeadm-" + kubernetesVersion + "-0"
+		return "kubeadm-" + getYumPackageVersion(kubernetesVersion)
 
 	case kubectl:
-		return "kubectl-" + kubernetesVersion + "-0"
+		return "kubectl-" + getYumPackageVersion(kubernetesVersion)
 
 	case kubelet:
-		return "kubelet-" + kubernetesVersion + "-0"
+		return "kubelet-" + getYumPackageVersion(kubernetesVersion)
 
 	case kubernetescni:
-		ver, _ := semver.NewVersion(kubernetesVersion)
-		c, _ := semver.NewConstraint(">=1.12.7,<1.13.x || >=1.13.5")
-		if c.Check(ver) {
-			return "kubernetes-cni-0.7.5-0"
-		}
-		return "kubernetes-cni-0.6.0-0"
+		return "kubernetes-cni-0.8.6-0"
 
 	default:
 		return ""
 	}
+}
+
+func getYumPackageVersion(kubernetesVersion string) string {
+	ver, _ := semver.NewVersion(kubernetesVersion)
+	// There was an issue with bundled CNI plugin so new package was released in case of versions below. (https://github.com/kubernetes/kubernetes/issues/92242)
+	c, _ := semver.NewConstraint("=1.16.11 || =1.17.7 || =1.18.4")
+	if c.Check(ver) {
+		return kubernetesVersion + "-1"
+	}
+	return kubernetesVersion + "-0"
 }

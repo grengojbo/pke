@@ -66,6 +66,12 @@ const (
 	// FlagKubernetesVersion Kubernetes version.
 	FlagKubernetesVersion = "kubernetes-version"
 
+	// FlagContainerRuntime Kuberneter container runtime.
+	FlagContainerRuntime = "kubernetes-container-runtime"
+
+	ContainerRuntimeContainerd = "containerd"
+	ContainerRuntimeDocker     = "docker"
+
 	// FlagNetworkProvider network provider for Kubernetes.
 	FlagNetworkProvider = "kubernetes-network-provider"
 	// FlagServiceCIDR range of IP address for service VIPs.
@@ -115,8 +121,11 @@ const (
 	// FlagAdmissionPluginPodSecurityPolicy enable admission plugin PodSecurityPolicy.
 	FlagAdmissionPluginPodSecurityPolicy = "with-plugin-psp"
 
+	// FlagNoAdmissionPluginDenyEscalatingExec disable admission plugin DenyEscalatingExec.
+	FlagNoAdmissionPluginDenyEscalatingExec = "without-plugin-deny-escalating-exec"
+
 	// FlagAuditLog enable audit log.
-	FlagAuditLog = "with-audit-log"
+	FlagAuditLog = "without-audit-log"
 
 	// Azure specific flags
 	// FlagAzureTenantID the AAD Tenant ID for the Subscription that the cluster is deployed in.
@@ -192,6 +201,7 @@ var (
 	ErrUnsupportedOS                = errors.New("unsupported operating system")
 	ErrInvalidInput                 = errors.New("invalid input")
 	ErrValidationFailed             = errors.New("validation failed")
+	ErrUnsupportedContainerRuntime  = errors.New("unsupported container runtime")
 	ErrUnsupportedNetworkProvider   = errors.New("unsupported network provider")
 	ErrUnsupportedKubernetesVersion = errors.New("unsupported kubernetes version")
 	ErrUnsupportedKernelVersion     = errors.New("unsupported kernel version")

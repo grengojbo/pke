@@ -14,16 +14,17 @@
 
 package node
 
-// kubeadmConfigV1Alpha3Template is a generated function returning the template as a string.
-func kubeadmConfigV1Alpha3Template() string {
-	var tmpl = "apiVersion: kubeadm.k8s.io/v1alpha3\n" +
+// kubeadmConfigV1Beta2Template is a generated function returning the template as a string.
+func kubeadmConfigV1Beta2Template() string {
+	var tmpl = "apiVersion: kubeadm.k8s.io/v1beta2\n" +
 		"kind: JoinConfiguration\n" +
-		"{{ if and .APIServerAdvertiseAddress .APIServerBindPort }}controlPlane: true\n" +
-		"apiEndpoint:\n" +
-		"  advertiseAddress: \"{{ .APIServerAdvertiseAddress }}\"\n" +
-		"  bindPort: {{ .APIServerBindPort }}{{end}}\n" +
+		"{{ if and .APIServerAdvertiseAddress .APIServerBindPort }}\n" +
+		"controlPlane:\n" +
+		"  localAPIEndpoint:\n" +
+		"    advertiseAddress: \"{{ .APIServerAdvertiseAddress }}\"\n" +
+		"    bindPort: {{ .APIServerBindPort }}{{end}}\n" +
 		"nodeRegistration:\n" +
-		"  criSocket: \"unix:///run/containerd/containerd.sock\"\n" +
+		"  criSocket: \"{{ .CRISocket }}\"\n" +
 		"  taints:{{ if not .Taints }} []{{end}}{{range .Taints}}\n" +
 		"    - key: \"{{.Key}}\"\n" +
 		"      value: \"{{.Value}}\"\n" +
@@ -35,7 +36,6 @@ func kubeadmConfigV1Alpha3Template() string {
 		"    read-only-port: \"0\"\n" +
 		"    anonymous-auth: \"false\"\n" +
 		"    streaming-connection-idle-timeout: \"5m\"\n" +
-		"    protect-kernel-defaults: \"true\"\n" +
 		"    event-qps: \"0\"\n" +
 		"    client-ca-file: \"/etc/kubernetes/pki/ca.crt\"\n" +
 		"    feature-gates: \"RotateKubeletServerCertificate=true\"\n" +
@@ -43,13 +43,14 @@ func kubeadmConfigV1Alpha3Template() string {
 		"    tls-cipher-suites: \"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_128_GCM_SHA256\"\n" +
 		"    authorization-mode: \"Webhook\"\n" +
 		"    experimental-kernel-memcg-notification: \"true\"\n" +
-		"discoveryTokenAPIServers:\n" +
-		"  - {{ .ControlPlaneEndpoint }}\n" +
-		"token: {{ .Token }}\n" +
-		"discoveryTokenCACertHashes:\n" +
-		"  - {{ .CACertHash }}\n" +
+		"discovery:\n" +
+		"  bootstrapToken:\n" +
+		"    apiServerEndpoint: \"{{ .ControlPlaneEndpoint }}\"\n" +
+		"    token: {{ .Token }}\n" +
+		"    caCertHashes:\n" +
+		"      - {{ .CACertHash }}\n" +
 		"---\n" +
-		"apiVersion: kubelet.config.k8s.io/v1beta1\n" +
+		"apiVersion: kubelet.config.k8s.io/v1beta2\n" +
 		"kind: KubeletConfiguration\n" +
 		"serverTLSBootstrap: true\n" +
 		"systemReserved:\n" +
@@ -65,6 +66,7 @@ func kubeadmConfigV1Alpha3Template() string {
 		"  memory.available: 100Mi\n" +
 		"  nodefs.available: 10%\n" +
 		"  nodefs.inodesFree: 5%\n" +
+		"protectKernelDefaults: true\n" +
 		""
 	return tmpl
 }
