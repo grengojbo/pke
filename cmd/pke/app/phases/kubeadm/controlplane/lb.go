@@ -25,8 +25,9 @@ import (
 )
 
 const (
-	metalLbConfig   = "/etc/kubernetes/metallb-config.yaml"
-	metalLbManifest = "https://raw.githubusercontent.com/google/metallb/v0.8.3/manifests/metallb.yaml"
+	metalLbConfig            = "/etc/kubernetes/metallb-config.yaml"
+	metalLbManifest          = "https://raw.githubusercontent.com/google/metallb/v0.9.3/manifests/metallb.yaml"
+	metalLbManifestNamespace = "https://raw.githubusercontent.com/google/metallb/v0.9.3/manifests/namespace.yaml"
 )
 
 func applyLbRange(out io.Writer, lbRange, cloudProvider string) error {
@@ -34,9 +35,16 @@ func applyLbRange(out io.Writer, lbRange, cloudProvider string) error {
 		return nil
 	}
 
-	cmd := runner.Cmd(out, cmdKubectl, "apply", "-f", metalLbManifest)
+	cmd := runner.Cmd(out, cmdKubectl, "apply", "-f", metalLbManifestNamespace)
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeConfig)
 	_, err := cmd.CombinedOutputAsync()
+	if err != nil {
+		return err
+	}
+
+	cmd = runner.Cmd(out, cmdKubectl, "apply", "-f", metalLbManifest)
+	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeConfig)
+	_, err = cmd.CombinedOutputAsync()
 	if err != nil {
 		return err
 	}
